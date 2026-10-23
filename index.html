@@ -229,7 +229,8 @@ const NTFY = 'https://ntfy.sh';
 const OVERPASS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter'
 ];
 const KIND = {bar:'Baari', pub:'Pubi', nightclub:'Yökerho', biergarten:'Terassi'};
 const TONIGHT_MS = 14 * 3600e3;
@@ -382,7 +383,7 @@ async function overpass(lat, lon, radius){
   let lastErr;
   for (const ep of OVERPASS) {
     try {
-      const r = await withTimeout(fetch(ep, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}}), 25000);
+      const r = await withTimeout(fetch(ep, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}}), 15000);
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
       return j.elements.map(e => ({
@@ -402,26 +403,31 @@ async function loadFallback(){
   return fallback || [];
 }
 let loadingBars = false;
+let searchR = 2000;      // metres; grows with "Lataa lisää"
+let listLimit = 30;      // rows shown; grows with "Lataa lisää"
+let liveOk = null;       // null = not tried, true/false = last live search result
+let shownCount = 0;
+function nearFallback(fb){ return fb.filter(b => hav(pos, {lat:b.la, lon:b.lo}) < searchR); }
 async function refreshBars(force){
   if (!pos || loadingBars) return;
   if (!force && fetchedAt && hav(fetchedAt, pos) < 350) return;
   loadingBars = true;
   setNextLoading();
-  // Show the bundled list instantly, then replace it with live OpenStreetMap data.
-  const fb0 = await loadFallback();
-  if (fb0.length) { nearby = fb0.filter(b => hav(pos, {lat:b.la, lon:b.lo}) < 4000); render(); }
+  // Show the bundled list instantly, then add live OpenStreetMap data on top of it.
+  const fb = await loadFallback();
+  if (fb.length) { nearby = nearFallback(fb); fetchedAt = {...pos}; render(); }
   try {
-    let list = await overpass(pos.lat, pos.lon, 1500);
-    if (list.length < 12) list = await overpass(pos.lat, pos.lon, 3500);
-    nearby = list; fetchedAt = {...pos};
+    const live = await overpass(pos.lat, pos.lon, Math.min(searchR, 12000));
+    const byId = new Map(nearFallback(fb).map(b => [b.i, b]));
+    for (const b of live) byId.set(b.i, b);
+    nearby = [...byId.values()];
+    fetchedAt = {...pos};
+    liveOk = true;
     setStatus(null);
   } catch (e) {
-    const fb = await loadFallback();
-    nearby = fb.filter(b => hav(pos, {lat:b.la, lon:b.lo}) < 4000);
-    fetchedAt = {...pos};
-    setStatus(nearby.length
-      ? 'Baarihaku on juuri nyt ruuhkainen, näytetään tallennettu pääkaupunkiseudun lista. <button type="button" data-act="retry">Yritä uudelleen</button>'
-      : 'Baareja ei saatu haettua. <button type="button" data-act="retry">Yritä uudelleen</button>');
+    liveOk = false;
+    if (!nearby.length) setStatus('Baareja ei saatu haettua. Tarkista nettiyhteys. <button type="button" data-act="retry">Yritä uudelleen</button>');
+    else setStatus('Näytetään tallennettu baarilista (pääkaupunkiseutu). Avoin baarihaku on juuri nyt ruuhkainen, joten uusimmat paikat voivat puuttua. Yritetään uudelleen automaattisesti. <button type="button" data-act="retry">Yritä nyt</button>', true);
   }
   loadingBars = false;
   render();
@@ -459,7 +465,7 @@ function visitorsOf(bid){ return Object.keys(S.members).filter(mid => S.marks[bi
 function allBars(){
   const byId = new Map();
   for (const b of nearby) byId.set(b.i, b);
-  for (const [id, b] of Object.entries(S.bars)) if (!byId.has(id) && pos && hav(pos, {lat:b.la, lon:b.lo}) < 4000) byId.set(id, {i:id, ...b});
+  for (const [id, b] of Object.entries(S.bars)) if (!byId.has(id) && pos && hav(pos, {lat:b.la, lon:b.lo}) < searchR) byId.set(id, {i:id, ...b});
   const list = [...byId.values()].map(b => ({...b, d: pos ? hav(pos, {lat:b.la, lon:b.lo}) : 0, who: visitorsOf(b.i)}));
   list.sort((a, b) => a.d - b.d);
   return list;
@@ -521,7 +527,15 @@ function render(){
     (shown.length ? `<span style="display:block;margin-top:4px">Pyyhkäise baari vasemmalle ohittaaksesi tai oikealle, jos olet käynyt siellä.</span>` : '');
   if (!pos) $('bars').innerHTML = `<li class="empty">Baarit näkyvät tässä, kun sijainti on selvillä.</li>`;
   else if (!shown.length) $('bars').innerHTML = `<li class="empty">${loadingBars ? 'Haetaan baareja…' : 'Ei baareja tällä alueella.'}</li>`;
-  else $('bars').innerHTML = shown.slice(0, 30).map(b => barItem(b, mem)).join('');
+  else $('bars').innerHTML = shown.slice(0, listLimit).map(b => barItem(b, mem)).join('');
+  shownCount = shown.length;
+  if (pos && !loadingBars) {
+    const rest = shown.length - Math.min(shown.length, listLimit);
+    const label = rest > 0 ? `Lataa lisää baareja (${rest} jäljellä)` : `Lataa lisää baareja kauempaa (nyt ${fmtDist(searchR)} säteellä)`;
+    $('bars').insertAdjacentHTML('beforeend', `<li><button class="btn btn-ghost" type="button" data-act="more" style="width:100%">${label}</button></li>`);
+  } else if (pos && loadingBars && shown.length) {
+    $('bars').insertAdjacentHTML('beforeend', `<li class="empty">Haetaan lisää baareja…</li>`);
+  }
 
   // map markers
   if (map) {
@@ -590,6 +604,11 @@ document.addEventListener('click', e => {
     toast('Kippis! ' + b.n + ' merkitty koko porukalle.'); openBar = null; render();
   }
   if (act === 'add') { $('addName').value = ''; $('addDlg').showModal(); }
+  if (act === 'more') {
+    if (shownCount > listLimit) { listLimit += 30; render(); }
+    else if (searchR >= 25000) { toast('Kaikki tallennetut baarit on jo listalla'); }
+    else { searchR = Math.min(searchR * 2, 25000); listLimit += 30; toast('Haetaan baareja ' + fmtDist(searchR) + ' säteeltä'); refreshBars(true); }
+  }
   if (act === 'skip') { const b = barById(t.dataset.bar); if (b) { openBar = null; skipBar(b); } }
   if (act === 'unskip') { const b = barById(t.dataset.bar); if (b) publish({t:'x', bs:[barRef(b)], v:0}); }
   if (act === 'unskip-all') {
@@ -735,6 +754,7 @@ async function openCrew(t){
   if (!me || !S.members[me]) askWho();
   maybeSnapshot();
   setInterval(maybeSnapshot, 20 * 60e3);
+  setInterval(() => { if (liveOk === false && !document.hidden) refreshBars(true); }, 3 * 60e3);
   setInterval(() => { pollAll().then(ch => { if (ch) { saveLocal(); render(); } }).catch(() => {}); }, 60e3);
 }
 $('createForm').addEventListener('submit', e => {
