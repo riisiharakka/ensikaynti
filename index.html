@@ -411,7 +411,7 @@ async function overpass(lat, lon, radius){
 }
 async function loadFallback(){
   if (fallback) return fallback;
-  try { const r = await fetch('bars.json', {cache:'force-cache'}); if (r.ok) { const rows = await r.json(); fallback = rows.map(x => ({i:x[0], la:x[1], lo:x[2], n:x[3], k:x[4], a:x[5]||''})); } } catch {}
+  try { const r = await fetch('bars.json', {cache:'force-cache'}); if (r.ok) { const rows = await r.json(); fallback = rows.concat(EXTRA_BARS).map(x => ({i:x[0], la:x[1], lo:x[2], n:x[3], k:x[4], a:x[5]||''})); } } catch {}
   return fallback || [];
 }
 let loadingBars = false;
@@ -472,8 +472,13 @@ function placeYou(){
 }
 
 /* ---------- derived ---------- */
+// Karaoke venues, checked by hand against Singa (singa.com/us/karaoke-near-me/fi/helsinki),
+// Strawberry Hotels' Helsinki karaoke guide, Stara.fi's 2023 list and Tripadvisor (Oct 2026).
+const KARAOKE_IDS = new Set(["n10887503186", "n1369465594", "n1376356012", "n151006269", "n165008163", "n2132227873", "n2247984006", "n247156695", "n2534656965", "n283309577", "n302644176", "n311030542", "n311045152", "n316251306", "n331112168", "n369005913", "n4123221289", "n4691897404", "n475540679", "n4767046626", "n548029958", "n5520161122", "n6255654108", "n648218679", "n648525100", "n7078186399", "n760459086", "n8874984242", "n9352229759", "x-ake", "x-iltreno", "x-mustaharka", "x-pubek"]);
+// Karaoke venues missing from OpenStreetMap, placed by street address.
+const EXTRA_BARS = [["x-ake", 60.16663, 24.94275, "Åke Karaoke", "bar", "Erottaja 2"], ["x-pubek", 60.16583, 24.9316, "Pub EK", "pub", "Eerikinkatu 28"], ["x-mustaharka", 60.19663, 24.95121, "Musta Härkä", "pub", "Mäkelänkatu 52"], ["x-iltreno", 60.23865, 25.11022, "Il Treno", "bar", "Pallaksentie 4"]];
 let karaFilter = store.get('ek-kara', 'all');
-function isKaraoke(b){ return !!b.kar || /karaoke/i.test(b.n || ''); }
+function isKaraoke(b){ return KARAOKE_IDS.has(b.i) || !!b.kar || /karaoke/i.test(b.n || ''); }
 function isSkipped(bid){ const x = S.skips[bid]; return !!x && x.v === 1 && Date.now() - x.ts < TONIGHT_MS; }
 function visitorsOf(bid){ return Object.keys(S.members).filter(mid => S.marks[bid + '|' + mid]?.v === 1); }
 function allBars(){
