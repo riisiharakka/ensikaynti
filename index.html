@@ -60,7 +60,14 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .chip .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
 .chip-add{background:transparent;border:1px dashed var(--line);color:var(--muted)}
 
-.next{margin-block:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:grid;gap:10px}
+.next{position:relative;margin-block:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:grid;gap:10px;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.next.enter{animation:enter .25s ease-out}
+@keyframes enter{from{transform:scale(.94);opacity:.3}to{transform:none;opacity:1}}
+.stamp{position:absolute;top:12px;font-family:var(--display);font-weight:800;font-size:26px;letter-spacing:.06em;border:3px solid currentColor;border-radius:8px;padding:0 10px;opacity:0;pointer-events:none;background:var(--panel)}
+.stamp-l{left:14px;color:var(--you);transform:rotate(-10deg)}
+.stamp-r{right:14px;color:var(--warn);transform:rotate(10deg)}
+[data-dir="right"] .stamp-l,[data-dir="left"] .stamp-r{opacity:var(--p,0)}
+.swipe-hint{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
 .next .eyebrow{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .next h2{font-size:34px}
 .next .meta{color:var(--muted);font-size:15px}
@@ -86,8 +93,16 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .search input{flex:1;min-width:0}
 
 ul.bars{list-style:none;margin:0;padding:0;display:grid;gap:8px}
-.bar{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
-.bar.visited{opacity:.62}
+.bar{position:relative;border-radius:14px;overflow:hidden}
+.bar-card{position:relative;z-index:1;background:var(--panel);border:1px solid var(--line);border-radius:14px;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.bar.visited .bar-card,.bar.skipped .bar-card{opacity:.62}
+.swipe-under{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 18px;font-weight:700;border-radius:14px;opacity:0}
+.swipe-under .l{color:var(--you)} .swipe-under .r{color:var(--warn)}
+.bar[data-dir="right"] .swipe-under{opacity:1;background:rgba(95,211,196,.16)}
+.bar[data-dir="right"] .swipe-under .r,.bar[data-dir="left"] .swipe-under .l{visibility:hidden}
+.bar[data-dir="left"] .swipe-under{opacity:1;background:rgba(255,122,107,.16)}
+.skip-tag{display:inline-block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--warn);border:1px solid var(--warn);border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:2px}
+.linkbtn{background:none;border:0;color:var(--amber);text-decoration:underline;padding:0;font-size:inherit}
 .bar-main{display:grid;grid-template-columns:76px 1fr;gap:12px;width:100%;text-align:left;background:none;border:0;padding:12px 14px;align-items:start}
 .dist{white-space:nowrap;font-family:var(--display);font-weight:800;font-size:22px;color:var(--amber);font-variant-numeric:tabular-nums;line-height:1.05}
 .dist small{display:block;font-family:var(--body);font-weight:400;font-size:12px;color:var(--muted)}
@@ -116,7 +131,8 @@ dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);bo
 dialog::backdrop{background:rgba(5,6,15,.7)}
 dialog form{display:grid;gap:14px}
 dialog .row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--text);color:var(--ink);padding:10px 16px;border-radius:12px;font-weight:700;z-index:2000;max-width:90vw}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--text);color:var(--ink);padding:10px 16px;border-radius:12px;font-weight:700;z-index:2000;max-width:90vw;display:flex;gap:14px;align-items:center}
+.toast button{background:var(--ink);color:var(--text);border:0;border-radius:8px;padding:6px 12px;font-weight:700}
 .you-dot{width:16px;height:16px;border-radius:50%;background:var(--you);border:3px solid #fff;box-shadow:0 0 0 6px rgba(95,211,196,.3)}
 @media (prefers-reduced-motion:no-preference){.sign{animation:flicker 4s 1s 1}
 @keyframes flicker{0%,100%{opacity:1}3%{opacity:.4}6%{opacity:1}9%{opacity:.6}12%{opacity:1}}}
@@ -154,7 +170,9 @@ dialog .row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
   </header>
   <main class="wrap">
     <div id="geoStatus" class="status" hidden></div>
-    <section class="next" id="next" aria-live="polite">
+    <section class="next" id="next" aria-live="polite" data-swipe="next">
+      <div class="stamp stamp-l" aria-hidden="true">KÄYTY</div>
+      <div class="stamp stamp-r" aria-hidden="true">OHITA</div>
       <div class="eyebrow">Lähin baari, jossa kukaan ei ole käynyt</div>
       <h2 id="nextName">Haetaan sijaintia…</h2>
       <div class="meta" id="nextMeta">Salli sijainti selaimessa, niin lähimmät baarit löytyvät.</div>
@@ -162,6 +180,7 @@ dialog .row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
         <a class="btn btn-amber" id="nextGo" target="_blank" rel="noopener">Reitti</a>
         <button class="btn btn-ghost" id="nextHere" type="button">Olemme täällä</button>
       </div>
+      <div class="swipe-hint" id="nextHint" hidden><span>→ Olen käynyt</span><span>Ohita ←</span></div>
     </section>
     <div id="map" role="region" aria-label="Kartta lähimmistä baareista"></div>
     <div class="tools">
@@ -223,11 +242,16 @@ const store = {
 };
 const rid = (n=10) => { const a='abcdefghijkmnopqrstuvwxyz23456789'; let s=''; const r=crypto.getRandomValues(new Uint8Array(n)); for (const x of r) s+=a[x%a.length]; return s; };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function toast(msg){ const t=$('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2200); }
+function toast(msg, undo){
+  const t=$('toast'); t.textContent='';
+  const sp=document.createElement('span'); sp.textContent=msg; t.appendChild(sp);
+  if (undo) { const b=document.createElement('button'); b.type='button'; b.textContent='Peru'; b.onclick=()=>{ t.hidden=true; undo(); }; t.appendChild(b); }
+  t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true, undo ? 4500 : 2200);
+}
 
 /* ---------- shared state (last-writer-wins maps) ---------- */
 let topic = null;
-let S = { name:null, members:{}, marks:{}, bars:{} };
+let S = { name:null, members:{}, marks:{}, bars:{}, skips:{} };
 // members: id -> {n,ts}; marks: "bar|member" -> {v:0/1, ts}; bars: id -> {n,la,lo,k,a}
 let me = null;
 let lastSnapAt = 0;
@@ -243,11 +267,19 @@ function applyEv(ev){
     if (ev.b.i) S.bars[ev.b.i] = {n:String(ev.b.n||'').slice(0,80), la:+ev.b.la, lo:+ev.b.lo, k:ev.b.k||'bar', a:String(ev.b.a||'').slice(0,80)};
     for (const w of ev.who) ch = lww(S.marks, ev.b.i + '|' + w, {v: ev.v ? 1 : 0, ts: ev.ts}) || ch;
   }
+  if (ev.t === 'x' && Array.isArray(ev.bs)) {
+    for (const b of ev.bs) {
+      if (!b || !b.i) continue;
+      if (!S.bars[b.i]) S.bars[b.i] = {n:String(b.n||'').slice(0,80), la:+b.la, lo:+b.lo, k:b.k||'bar', a:String(b.a||'').slice(0,80)};
+      ch = lww(S.skips, b.i, {v: ev.v ? 1 : 0, ts: ev.ts}) || ch;
+    }
+  }
   if (ev.t === 's') {
     if (ev.name) { if (!S.name || ev.name[1] > S.name.ts) { S.name = {n:ev.name[0], ts:ev.name[1]}; ch = true; } }
     for (const [id, [n, ts]] of Object.entries(ev.m || {})) ch = lww(S.members, id, {n, ts}) || ch;
     for (const [k, [v, ts]] of Object.entries(ev.k || {})) ch = lww(S.marks, k, {v, ts}) || ch;
     for (const [id, b] of Object.entries(ev.b || {})) if (!S.bars[id]) { S.bars[id] = {n:b[0], la:b[1], lo:b[2], k:b[3], a:b[4]||''}; ch = true; }
+    for (const [id, [v, ts]] of Object.entries(ev.x || {})) ch = lww(S.skips, id, {v, ts}) || ch;
   }
   return ch;
 }
@@ -313,6 +345,14 @@ function snapshotChunks(){
     cur.k[k] = [x.v, x.ts];
     if (b && !cur.b[bid]) cur.b[bid] = [b.n, +b.la.toFixed(5), +b.lo.toFixed(5), b.k, b.a];
     if (size(cur) > 3300) { chunks.push(cur); cur = {t:'s', m:{}, k:{}, b:{}}; }
+  }
+  cur.x = {};
+  for (const [bid, x] of Object.entries(S.skips)) {
+    if (Date.now() - x.ts > TONIGHT_MS) continue;
+    const b = S.bars[bid];
+    cur.x[bid] = [x.v, x.ts];
+    if (b && !cur.b[bid]) cur.b[bid] = [b.n, +b.la.toFixed(5), +b.lo.toFixed(5), b.k, b.a];
+    if (size(cur) > 3300) { chunks.push(cur); cur = {t:'s', m:{}, k:{}, b:{}, x:{}}; }
   }
   chunks.push(cur);
   return chunks;
@@ -406,7 +446,7 @@ function geoFail(){
   $('nextName').textContent = 'Missä olette?';
   $('nextMeta').textContent = 'Napauta karttaa tai hae osoite.';
 }
-function setManual(lat, lon){ pos = {lat, lon, manual:true}; placeYou(); refreshBars(true); render(); }
+function setManual(lat, lon){ pos = {lat, lon, manual:true}; setStatus(null); placeYou(); refreshBars(true); render(); }
 function placeYou(){
   if (!pos) return;
   if (!youMarker) youMarker = L.marker([pos.lat, pos.lon], {icon: L.divIcon({className:'', html:'<div class="you-dot"></div>', iconSize:[16,16], iconAnchor:[8,8]}), zIndexOffset:1000, interactive:false}).addTo(map);
@@ -414,6 +454,7 @@ function placeYou(){
 }
 
 /* ---------- derived ---------- */
+function isSkipped(bid){ const x = S.skips[bid]; return !!x && x.v === 1 && Date.now() - x.ts < TONIGHT_MS; }
 function visitorsOf(bid){ return Object.keys(S.members).filter(mid => S.marks[bid + '|' + mid]?.v === 1); }
 function allBars(){
   const byId = new Map();
@@ -447,7 +488,7 @@ function render(){
 
   const bars = allBars();
   const onlyNew = $('onlyNew').checked;
-  const fresh = bars.filter(b => !b.who.length);
+  const fresh = bars.filter(b => !b.who.length && !isSkipped(b.i));
   const shown = onlyNew ? fresh : bars;
 
   // next CTA
@@ -458,7 +499,9 @@ function render(){
     $('nextGo').href = dirUrl(nx);
     $('nextHere').dataset.bar = nx.i;
     $('nextActions').hidden = false;
+    $('next').dataset.bar = nx.i; $('nextHint').hidden = false;
   } else if (pos && !loadingBars && nearby.length) {
+    delete $('next').dataset.bar; $('nextHint').hidden = true;
     $('nextName').textContent = 'Kaikki lähibaarit on käyty';
     $('nextMeta').textContent = 'Siirtykää vähän kauemmas, niin lista päivittyy.';
     $('nextActions').hidden = true;
@@ -468,7 +511,14 @@ function render(){
 
   // list
   const hiddenCount = bars.length - shown.length;
-  $('hiddenNote').textContent = onlyNew && hiddenCount ? `${hiddenCount} lähibaaria piilotettu, koska joku on jo käynyt niissä.` : '';
+  const skippedHere = bars.filter(b => isSkipped(b.i)).length;
+  const visitedHere = bars.filter(b => b.who.length && !isSkipped(b.i)).length;
+  const parts = [];
+  if (onlyNew && visitedHere) parts.push(`${visitedHere} käytyä`);
+  if (onlyNew && skippedHere) parts.push(`${skippedHere} ohitettua`);
+  $('hiddenNote').innerHTML = (parts.length ? `${parts.join(' ja ')} lähibaaria piilotettu. ` : '') +
+    (skippedHere ? `<button type="button" class="linkbtn" data-act="unskip-all">Palauta ohitetut</button>` : '') +
+    (shown.length ? `<span style="display:block;margin-top:4px">Pyyhkäise baari vasemmalle ohittaaksesi tai oikealle, jos olet käynyt siellä.</span>` : '');
   if (!pos) $('bars').innerHTML = `<li class="empty">Baarit näkyvät tässä, kun sijainti on selvillä.</li>`;
   else if (!shown.length) $('bars').innerHTML = `<li class="empty">${loadingBars ? 'Haetaan baareja…' : 'Ei baareja tällä alueella.'}</li>`;
   else $('bars').innerHTML = shown.slice(0, 30).map(b => barItem(b, mem)).join('');
@@ -477,7 +527,7 @@ function render(){
   if (map) {
     barLayer.clearLayers();
     for (const b of bars.slice(0, 120)) {
-      const v = b.who.length > 0;
+      const v = b.who.length > 0 || isSkipped(b.i);
       const mk = L.circleMarker([b.la, b.lo], {radius: v ? 6 : 9, color: v ? '#7d80a3' : '#ffb547', weight: 2, fillColor: v ? '#3a3d5e' : '#ffb547', fillOpacity: v ? .6 : .85});
       mk.bindTooltip(esc(b.n) + (v ? ' (käyty)' : ''), {direction:'top'});
       mk.on('click', () => { openBar = b.i; if (!b.who.length || !onlyNew) {} else { $('onlyNew').checked = false; } render(); document.getElementById('b-' + b.i)?.scrollIntoView({behavior:'smooth', block:'center'}); });
@@ -499,11 +549,14 @@ function barItem(b, mem){
   const isOpen = openBar === b.i;
   const chips = b.who.map(id => `<span class="chip${id === me ? ' me' : ''}">${esc(S.members[id]?.n)}</span>`).join('');
   const nobody = !b.who.length;
+  const sk = isSkipped(b.i);
   const toggles = mem.map(([id, m]) => `<button type="button" class="tg" data-act="tg" data-bar="${b.i}" data-mem="${id}" aria-pressed="${b.who.includes(id)}">${esc(m.n)}${id === me ? ' (sinä)' : ''}</button>`).join('');
-  return `<li class="bar${nobody ? '' : ' visited'}" id="b-${b.i}">
+  return `<li class="bar${nobody ? '' : ' visited'}${sk ? ' skipped' : ''}" id="b-${b.i}">
+    <div class="swipe-under" aria-hidden="true"><span class="l">✓ Olen käynyt</span><span class="r">Ohita ✕</span></div>
+    <div class="bar-card" data-swipe="bar" data-bar="${b.i}">
     <button class="bar-main" type="button" data-act="open" data-bar="${b.i}" aria-expanded="${isOpen}">
       <span class="dist">${fmtDist(b.d)}<small>${walkMin(b.d)} min</small></span>
-      <span style="min-width:0"><span class="bar-name">${esc(b.n)}</span>${nobody ? '<span class="fresh">Uusi</span>' : ''}
+      <span style="min-width:0"><span class="bar-name">${esc(b.n)}</span>${sk ? '<span class="skip-tag">Ohitettu</span>' : nobody ? '<span class="fresh">Uusi</span>' : ''}
         <span class="bar-meta" style="display:block">${KIND[b.k] || 'Baari'}${b.a ? ' · ' + esc(b.a) : ''}</span>
         ${chips ? `<span class="who">${chips}</span>` : ''}</span>
     </button>
@@ -513,7 +566,9 @@ function barItem(b, mem){
         <button class="btn btn-amber btn-small" type="button" data-act="all" data-bar="${b.i}">Koko porukka on täällä</button>
         <a class="btn btn-ghost btn-small" href="${dirUrl(b)}" target="_blank" rel="noopener">Reitti</a>
         <a class="btn btn-ghost btn-small" href="https://www.openstreetmap.org/${({n:'node',w:'way',r:'relation'})[b.i[0]] || 'node'}/${b.i.slice(1)}" target="_blank" rel="noopener">Tiedot</a>
+        <button class="btn btn-ghost btn-small" type="button" data-act="${sk ? 'unskip' : 'skip'}" data-bar="${b.i}">${sk ? 'Palauta listalle' : 'Ohita'}</button>
       </div></div>` : ''}
+    </div>
   </li>`;
 }
 function barById(id){ return allBars().find(b => b.i === id) || (S.bars[id] && {i:id, ...S.bars[id]}); }
@@ -535,6 +590,14 @@ document.addEventListener('click', e => {
     toast('Kippis! ' + b.n + ' merkitty koko porukalle.'); openBar = null; render();
   }
   if (act === 'add') { $('addName').value = ''; $('addDlg').showModal(); }
+  if (act === 'skip') { const b = barById(t.dataset.bar); if (b) { openBar = null; skipBar(b); } }
+  if (act === 'unskip') { const b = barById(t.dataset.bar); if (b) publish({t:'x', bs:[barRef(b)], v:0}); }
+  if (act === 'unskip-all') {
+    const ids = Object.keys(S.skips).filter(isSkipped);
+    const bs = ids.map(id => barById(id)).filter(Boolean).map(barRef);
+    for (let i = 0; i < bs.length; i += 15) publish({t:'x', bs: bs.slice(i, i + 15), v:0});
+    toast('Ohitetut palautettu listalle');
+  }
   if (act === 'retry') refreshBars(true);
 });
 $('nextHere').addEventListener('click', () => {
@@ -567,6 +630,74 @@ $('addrForm').addEventListener('submit', async e => {
   } catch { toast('Haku ei onnistunut'); }
 });
 
+/* ---------- swipe (Tinder-style) ---------- */
+function skipBar(b){
+  publish({t:'x', bs:[barRef(b)], v:1});
+  toast(b.n + ' ohitettu', () => publish({t:'x', bs:[barRef(b)], v:0}));
+}
+function visitedBar(b){
+  if (!me) { askWho(); return; }
+  const prev = S.marks[b.i + '|' + me]?.v === 1;
+  publish({t:'v', b:barRef(b), who:[me], v:1});
+  toast('Merkitty: olet käynyt, ' + b.n, prev ? null : () => publish({t:'v', b:barRef(b), who:[me], v:0}));
+}
+let drag = null, suppressClick = false;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+document.addEventListener('pointerdown', e => {
+  if (e.button > 0) return;
+  const card = e.target.closest('[data-swipe]');
+  if (!card || !card.dataset.bar || e.target.closest('.detail, input, dialog')) return;
+  drag = {card, host: card.dataset.swipe === 'bar' ? card.closest('.bar') : card, x0: e.clientX, y0: e.clientY, dx: 0, active: false, id: e.pointerId};
+});
+document.addEventListener('pointermove', e => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+  if (!drag.active) {
+    if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+      drag.active = true; drag.card.style.transition = 'none';
+      try { drag.card.setPointerCapture(e.pointerId); } catch {}
+    } else if (Math.abs(dy) > 12) { drag = null; return; }
+    else return;
+  }
+  e.preventDefault();
+  drag.dx = dx;
+  const thr = swipeThreshold(drag.card);
+  const rot = drag.card.dataset.swipe === 'next' ? dx / 18 : 0;
+  drag.card.style.transform = `translateX(${dx}px) rotate(${rot}deg)`;
+  drag.host.dataset.dir = Math.abs(dx) < 16 ? '' : dx > 0 ? 'right' : 'left';
+  drag.host.style.setProperty('--p', Math.min(1, Math.abs(dx) / thr).toFixed(2));
+}, {passive: false});
+function swipeThreshold(card){ return Math.min(140, card.offsetWidth * 0.25); }
+function endDrag(e){
+  if (!drag || e.pointerId !== drag.id) return;
+  const d = drag; drag = null;
+  if (!d.active) return;
+  suppressClick = true; setTimeout(() => suppressClick = false, 80);
+  const thr = swipeThreshold(d.card);
+  const b = barById(d.card.dataset.bar);
+  if (Math.abs(d.dx) >= thr && b && e.type !== 'pointercancel') {
+    const dir = d.dx > 0 ? 1 : -1;
+    d.card.style.transition = reduceMotion ? 'none' : 'transform .22s ease-out, opacity .22s ease-out';
+    d.card.style.transform = `translateX(${dir * (d.card.offsetWidth + 60)}px) rotate(${d.card.dataset.swipe === 'next' ? dir * 18 : 0}deg)`;
+    d.card.style.opacity = '0';
+    setTimeout(() => {
+      if (d.card.dataset.swipe === 'next') {
+        d.card.style.transition = 'none'; d.card.style.transform = ''; d.card.style.opacity = '';
+        d.host.dataset.dir = '';
+        d.card.classList.remove('enter'); void d.card.offsetWidth; d.card.classList.add('enter');
+      }
+      if (dir < 0) skipBar(b); else visitedBar(b);
+    }, reduceMotion ? 0 : 200);
+  } else {
+    d.card.style.transition = 'transform .2s ease-out';
+    d.card.style.transform = '';
+    d.host.dataset.dir = '';
+  }
+}
+document.addEventListener('pointerup', endDrag);
+document.addEventListener('pointercancel', endDrag);
+document.addEventListener('click', e => { if (suppressClick) { e.preventDefault(); e.stopPropagation(); } }, true);
+
 /* who are you */
 function askWho(){
   const pick = $('whoPick');
@@ -594,7 +725,7 @@ async function openCrew(t){
   topic = t;
   $('landing').hidden = true; $('app').hidden = false;
   S = store.get('ek:' + topic, S);
-  S.members ||= {}; S.marks ||= {}; S.bars ||= {};
+  S.members ||= {}; S.marks ||= {}; S.bars ||= {}; S.skips ||= {};
   me = store.get('ek-me:' + topic, null);
   for (const ev of store.get('ek-out:' + topic, [])) outbox.push(ev);
   initMap(); render(); startGeo();
