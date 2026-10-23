@@ -102,6 +102,11 @@ ul.bars{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 .bar[data-dir="right"] .swipe-under .r,.bar[data-dir="left"] .swipe-under .l{visibility:hidden}
 .bar[data-dir="left"] .swipe-under{opacity:1;background:rgba(255,122,107,.16)}
 .skip-tag{display:inline-block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--warn);border:1px solid var(--warn);border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:2px}
+.seg{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.seg .lbl{margin:0 4px 0 0}
+.seg button{border:1.5px solid var(--line);background:transparent;border-radius:999px;padding:6px 12px;font-size:14px;min-height:36px}
+.seg button[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:var(--amber-ink);font-weight:700}
+.kara-tag{display:inline-block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--you);border:1px solid var(--you);border-radius:6px;padding:0 6px;margin-left:6px;vertical-align:1px}
 .linkbtn{background:none;border:0;color:var(--amber);text-decoration:underline;padding:0;font-size:inherit}
 .bar-main{display:grid;grid-template-columns:76px 1fr;gap:12px;width:100%;text-align:left;background:none;border:0;padding:12px 14px;align-items:start}
 .dist{white-space:nowrap;font-family:var(--display);font-weight:800;font-size:22px;color:var(--amber);font-variant-numeric:tabular-nums;line-height:1.05}
@@ -173,7 +178,7 @@ dialog .row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
     <section class="next" id="next" aria-live="polite" data-swipe="next">
       <div class="stamp stamp-l" aria-hidden="true">KÄYTY</div>
       <div class="stamp stamp-r" aria-hidden="true">OHITA</div>
-      <div class="eyebrow">Lähin baari, jossa kukaan ei ole käynyt</div>
+      <div class="eyebrow" id="nextEyebrow">Lähin baari, jossa kukaan ei ole käynyt</div>
       <h2 id="nextName">Haetaan sijaintia…</h2>
       <div class="meta" id="nextMeta">Salli sijainti selaimessa, niin lähimmät baarit löytyvät.</div>
       <div class="row" id="nextActions" hidden>
@@ -186,6 +191,12 @@ dialog .row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
     <div class="tools">
       <h3>Lähimmät baarit</h3>
       <label class="switch"><input type="checkbox" id="onlyNew" checked> Vain käymättömät</label>
+    </div>
+    <div class="seg" role="group" aria-label="Karaoke-suodatin">
+      <span class="lbl">Karaoke</span>
+      <button type="button" data-kara="all">Kaikki</button>
+      <button type="button" data-kara="only">Vain karaoke</button>
+      <button type="button" data-kara="none">Ei karaokea</button>
     </div>
     <form class="search" id="addrForm" autocomplete="off">
       <input type="text" id="addr" placeholder="Hae osoite tai paikka (jos sijainti ei toimi)" aria-label="Hae osoite">
@@ -391,6 +402,7 @@ async function overpass(lat, lon, radius){
         n: e.tags.name,
         la: e.lat ?? e.center?.lat, lo: e.lon ?? e.center?.lon,
         k: e.tags.amenity,
+        kar: e.tags.karaoke === 'yes' || e.tags.karaoke === 'only' || /karaoke/i.test(e.tags.name + ' ' + (e.tags.description || '')),
         a: [e.tags['addr:street'], e.tags['addr:housenumber']].filter(Boolean).join(' ')
       })).filter(b => b.la && b.lo);
     } catch (e) { lastErr = e; }
@@ -460,6 +472,8 @@ function placeYou(){
 }
 
 /* ---------- derived ---------- */
+let karaFilter = store.get('ek-kara', 'all');
+function isKaraoke(b){ return !!b.kar || /karaoke/i.test(b.n || ''); }
 function isSkipped(bid){ const x = S.skips[bid]; return !!x && x.v === 1 && Date.now() - x.ts < TONIGHT_MS; }
 function visitorsOf(bid){ return Object.keys(S.members).filter(mid => S.marks[bid + '|' + mid]?.v === 1); }
 function allBars(){
@@ -492,7 +506,9 @@ function render(){
   $('members').innerHTML = mem.map(([id, m]) => `<span class="chip${id === me ? ' me' : ''}"><span class="dot"></span>${esc(m.n)}${id === me ? ' (sinä)' : ''}</span>`).join('') +
     `<button class="chip chip-add" type="button" data-act="add">+ Lisää kaveri</button>`;
 
-  const bars = allBars();
+  document.querySelectorAll('[data-kara]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.kara === karaFilter)));
+  $('nextEyebrow').textContent = karaFilter === 'only' ? 'Lähin karaokebaari, jossa kukaan ei ole käynyt' : 'Lähin baari, jossa kukaan ei ole käynyt';
+  const bars = allBars().filter(b => karaFilter === 'all' || (karaFilter === 'only') === isKaraoke(b));
   const onlyNew = $('onlyNew').checked;
   const fresh = bars.filter(b => !b.who.length && !isSkipped(b.i));
   const shown = onlyNew ? fresh : bars;
@@ -526,7 +542,7 @@ function render(){
     (skippedHere ? `<button type="button" class="linkbtn" data-act="unskip-all">Palauta ohitetut</button>` : '') +
     (shown.length ? `<span style="display:block;margin-top:4px">Pyyhkäise baari vasemmalle ohittaaksesi tai oikealle, jos olet käynyt siellä.</span>` : '');
   if (!pos) $('bars').innerHTML = `<li class="empty">Baarit näkyvät tässä, kun sijainti on selvillä.</li>`;
-  else if (!shown.length) $('bars').innerHTML = `<li class="empty">${loadingBars ? 'Haetaan baareja…' : 'Ei baareja tällä alueella.'}</li>`;
+  else if (!shown.length) $('bars').innerHTML = `<li class="empty">${loadingBars ? 'Haetaan baareja…' : (karaFilter === 'only' ? 'Ei karaokebaareja tällä alueella. Hae kauempaa alta.' : 'Ei baareja tällä alueella.')}</li>`;
   else $('bars').innerHTML = shown.slice(0, listLimit).map(b => barItem(b, mem)).join('');
   shownCount = shown.length;
   if (pos && !loadingBars) {
@@ -571,7 +587,7 @@ function barItem(b, mem){
     <button class="bar-main" type="button" data-act="open" data-bar="${b.i}" aria-expanded="${isOpen}">
       <span class="dist">${fmtDist(b.d)}<small>${walkMin(b.d)} min</small></span>
       <span style="min-width:0"><span class="bar-name">${esc(b.n)}</span>${sk ? '<span class="skip-tag">Ohitettu</span>' : nobody ? '<span class="fresh">Uusi</span>' : ''}
-        <span class="bar-meta" style="display:block">${KIND[b.k] || 'Baari'}${b.a ? ' · ' + esc(b.a) : ''}</span>
+        <span class="bar-meta" style="display:block">${KIND[b.k] || 'Baari'}${b.a ? ' · ' + esc(b.a) : ''}${isKaraoke(b) ? '<span class="kara-tag">Karaoke</span>' : ''}</span>
         ${chips ? `<span class="who">${chips}</span>` : ''}</span>
     </button>
     ${isOpen ? `<div class="detail">
@@ -625,6 +641,10 @@ $('nextHere').addEventListener('click', () => {
   toast('Kippis! ' + b.n + ' merkitty koko porukalle.');
 });
 $('onlyNew').addEventListener('change', render);
+document.addEventListener('click', e => {
+  const k = e.target.closest('[data-kara]'); if (!k) return;
+  karaFilter = k.dataset.kara; store.set('ek-kara', karaFilter); listLimit = 30; render();
+});
 $('addCancel').addEventListener('click', () => $('addDlg').close());
 $('addForm').addEventListener('submit', e => {
   const n = $('addName').value.trim(); if (!n) { e.preventDefault(); return; }
