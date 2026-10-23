@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ensikäynti</title>
+<meta name="description" content="Baarikierros paikkoihin, joissa kukaan porukasta ei ole vielä käynyt. Lähimmät baarit kartalla ja yhteinen kirjanpito käynneistä.">
+<meta name="theme-color" content="#14162a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314162a'/%3E%3Cpath d='M18 16h28l-12 18v12h7v4H23v-4h7V34z' fill='%23ffb547'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+/* Layout: one-column night app – big "next bar" call to action, map, then the nearest-bars list. Single dark look by design. */
+:root{
+  --ink:#14162a; --panel:#1d2038; --line:#2e3252; --text:#eef0fb; --muted:#9aa0c3;
+  --amber:#ffb547; --amber-ink:#2a1a00; --you:#5fd3c4; --done:#7d80a3; --warn:#ff7a6b;
+  --display:"Big Shoulders Display", "Arial Narrow", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--ink);color:var(--text);font:16px/1.45 var(--body);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  -webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--display);font-weight:800;letter-spacing:.01em;line-height:1;text-wrap:balance;margin:0}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--you);outline-offset:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:12px;padding:12px 18px;font-weight:700;min-height:48px}
+.btn-amber{background:var(--amber);color:var(--amber-ink)}
+.btn-ghost{background:transparent;border:1.5px solid var(--line);color:var(--text)}
+.btn-small{min-height:36px;padding:6px 12px;border-radius:10px;font-size:14px}
+input[type=text]{width:100%;background:var(--panel);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;min-height:48px}
+input[type=text]:focus{border-color:var(--amber);outline:none}
+label.lbl{display:block;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+
+/* landing */
+#landing{padding-block:48px 32px}
+.sign{font-family:var(--display);font-size:clamp(56px,15vw,104px);font-weight:800;color:var(--amber);
+  text-shadow:0 0 18px rgba(255,181,71,.45),0 0 2px rgba(255,181,71,.9);line-height:.9;margin-bottom:12px}
+.lede{font-size:19px;max-width:34ch;color:var(--text);margin:0 0 28px}
+.form{display:grid;gap:16px;max-width:420px}
+.how{margin-top:36px;display:grid;gap:10px;color:var(--muted);font-size:15px;max-width:52ch}
+.how b{color:var(--text)}
+
+/* app */
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:1000;background:var(--ink);border-bottom:1px solid var(--line)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:1001;background:var(--ink)}
+.top-row{display:flex;align-items:center;gap:12px;padding-block:10px}
+.top-row h1{font-size:28px;color:var(--amber);flex:0 0 auto}
+.crew-name{min-width:0;flex:1;font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.members{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:10px}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 10px;font-size:13px;background:var(--panel);border:1px solid var(--line);white-space:nowrap}
+.chip.me{border-color:var(--you);color:var(--you)}
+.chip .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+.chip-add{background:transparent;border:1px dashed var(--line);color:var(--muted)}
+
+.next{margin-block:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:grid;gap:10px}
+.next .eyebrow{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.next h2{font-size:34px}
+.next .meta{color:var(--muted);font-size:15px}
+.next .row{display:flex;gap:8px;flex-wrap:wrap}
+
+.status{font-size:14px;color:var(--muted);padding:8px 12px;border-radius:10px;background:rgba(255,122,107,.08);border:1px solid rgba(255,122,107,.35);margin-block:10px}
+.status.ok{background:rgba(95,211,196,.07);border-color:rgba(95,211,196,.3)}
+.status button{background:none;border:0;color:var(--amber);text-decoration:underline;padding:0}
+
+#map{height:42vh;min-height:240px;max-height:420px;border-radius:16px;overflow:hidden;border:1px solid var(--line);background:#0e1020}
+.leaflet-container{font:inherit;background:#0e1020}
+.leaflet-tile-pane{filter:brightness(.62) saturate(.6) hue-rotate(195deg) contrast(1.05)}
+.leaflet-control-attribution{background:rgba(20,22,42,.8)!important;color:var(--muted)!important;font-size:10px}
+.leaflet-control-attribution a{color:var(--muted)!important}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--text)}
+.leaflet-bar a{background:var(--panel)!important;color:var(--text)!important;border-color:var(--line)!important}
+
+.tools{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-block:16px 8px}
+.tools h3{font-size:24px}
+.switch{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+.switch input{width:20px;height:20px;accent-color:var(--amber)}
+.search{display:flex;gap:8px;margin-bottom:10px}
+.search input{flex:1;min-width:0}
+
+ul.bars{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.bar{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.bar.visited{opacity:.62}
+.bar-main{display:grid;grid-template-columns:76px 1fr;gap:12px;width:100%;text-align:left;background:none;border:0;padding:12px 14px;align-items:start}
+.dist{white-space:nowrap;font-family:var(--display);font-weight:800;font-size:22px;color:var(--amber);font-variant-numeric:tabular-nums;line-height:1.05}
+.dist small{display:block;font-family:var(--body);font-weight:400;font-size:12px;color:var(--muted)}
+.bar.visited .dist{color:var(--done)}
+.bar-name{font-weight:700;font-size:17px;min-width:0;overflow-wrap:anywhere}
+.bar-meta{font-size:14px;color:var(--muted)}
+.who{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.who .chip{font-size:12px;padding:2px 8px}
+.fresh{display:inline-block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--amber-ink);background:var(--amber);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.detail{border-top:1px solid var(--line);padding:12px 14px;display:grid;gap:12px}
+.toggles{display:flex;gap:6px;flex-wrap:wrap}
+.tg{border:1.5px solid var(--line);background:transparent;border-radius:999px;padding:6px 12px;font-size:14px;min-height:36px}
+.tg[aria-pressed="true"]{background:var(--you);border-color:var(--you);color:#062a26;font-weight:700}
+.detail .row{display:flex;gap:8px;flex-wrap:wrap}
+.detail a{color:var(--amber)}
+.empty{color:var(--muted);padding:16px;text-align:center;border:1px dashed var(--line);border-radius:14px}
+
+.route{margin-block:24px;display:grid;gap:8px}
+.route ol{margin:0;padding-left:22px;color:var(--text)}
+.route li{padding:2px 0}
+.route li span{color:var(--muted);font-size:14px;font-variant-numeric:tabular-nums}
+footer{color:var(--muted);font-size:12px;padding-block:28px 40px}
+footer a{color:var(--muted)}
+
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:20px;width:min(92vw,420px)}
+dialog::backdrop{background:rgba(5,6,15,.7)}
+dialog form{display:grid;gap:14px}
+dialog .row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--text);color:var(--ink);padding:10px 16px;border-radius:12px;font-weight:700;z-index:2000;max-width:90vw}
+.you-dot{width:16px;height:16px;border-radius:50%;background:var(--you);border:3px solid #fff;box-shadow:0 0 0 6px rgba(95,211,196,.3)}
+@media (prefers-reduced-motion:no-preference){.sign{animation:flicker 4s 1s 1}
+@keyframes flicker{0%,100%{opacity:1}3%{opacity:.4}6%{opacity:1}9%{opacity:.6}12%{opacity:1}}}
+</style>
+</head>
+<body>
+
+<!-- Landing -->
+<section id="landing" class="wrap" hidden>
+  <div class="sign">Ensi&shy;käynti</div>
+  <p class="lede">Baarikierros paikkoihin, joissa kukaan porukasta ei ole vielä käynyt. Lähimmät baarit kartalla, yhteinen kirjanpito siitä, kuka on käynyt missä.</p>
+  <form id="createForm" class="form" autocomplete="off">
+    <div><label class="lbl" for="crewName">Porukan nimi</label><input type="text" id="crewName" maxlength="40" placeholder="Esim. Perjantain kierros" required></div>
+    <div><label class="lbl" for="myName">Sinun nimesi</label><input type="text" id="myName" maxlength="24" placeholder="Esim. Harri" required></div>
+    <button class="btn btn-amber" type="submit">Luo porukka</button>
+  </form>
+  <div class="how">
+    <div><b>1.</b> Luo porukka ja jaa linkki kavereille. Kuka tahansa linkin saanut pääsee mukaan, kirjautumista ei tarvita.</div>
+    <div><b>2.</b> Merkitse baarit, joissa olet käynyt joskus aiemmin. Ne putoavat pois listalta.</div>
+    <div><b>3.</b> Mene lähimpään baariin, jossa kukaan ei ole käynyt, ja merkitse se käydyksi. Toista.</div>
+  </div>
+</section>
+
+<!-- App -->
+<div id="app" hidden>
+  <header class="top">
+    <div class="wrap">
+      <div class="top-row">
+        <h1>Ensikäynti</h1>
+        <div class="crew-name" id="crewTitle"></div>
+        <button class="btn btn-ghost btn-small" id="shareBtn" type="button">Kutsu</button>
+      </div>
+      <div class="members" id="members"></div>
+    </div>
+  </header>
+  <main class="wrap">
+    <div id="geoStatus" class="status" hidden></div>
+    <section class="next" id="next" aria-live="polite">
+      <div class="eyebrow">Lähin baari, jossa kukaan ei ole käynyt</div>
+      <h2 id="nextName">Haetaan sijaintia…</h2>
+      <div class="meta" id="nextMeta">Salli sijainti selaimessa, niin lähimmät baarit löytyvät.</div>
+      <div class="row" id="nextActions" hidden>
+        <a class="btn btn-amber" id="nextGo" target="_blank" rel="noopener">Reitti</a>
+        <button class="btn btn-ghost" id="nextHere" type="button">Olemme täällä</button>
+      </div>
+    </section>
+    <div id="map" role="region" aria-label="Kartta lähimmistä baareista"></div>
+    <div class="tools">
+      <h3>Lähimmät baarit</h3>
+      <label class="switch"><input type="checkbox" id="onlyNew" checked> Vain käymättömät</label>
+    </div>
+    <form class="search" id="addrForm" autocomplete="off">
+      <input type="text" id="addr" placeholder="Hae osoite tai paikka (jos sijainti ei toimi)" aria-label="Hae osoite">
+      <button class="btn btn-ghost" type="submit">Hae</button>
+    </form>
+    <div id="hiddenNote" class="bar-meta" style="margin-bottom:8px"></div>
+    <ul class="bars" id="bars"></ul>
+    <section class="route" id="route" hidden>
+      <h3>Tämän illan reitti</h3>
+      <ol id="routeList"></ol>
+    </section>
+    <footer>
+      Baaritiedot: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap-tekijät</a> (Overpass API). Merkinnät synkronoidaan ntfy.sh:n kautta porukan satunnaisella tunnuksella. Kuka tahansa, jolla on porukan linkki, näkee ja voi muokata merkintöjä. Juo vastuullisesti.
+    </footer>
+  </main>
+</div>
+
+<dialog id="whoDlg">
+  <form method="dialog" id="whoForm" autocomplete="off">
+    <h2 style="font-size:30px">Kuka sinä olet?</h2>
+    <div class="toggles" id="whoPick"></div>
+    <div><label class="lbl" for="whoName">Tai uusi nimi</label><input type="text" id="whoName" maxlength="24" placeholder="Nimesi"></div>
+    <div class="row"><button class="btn btn-amber" value="ok" type="submit">Liity porukkaan</button></div>
+  </form>
+</dialog>
+<dialog id="addDlg">
+  <form method="dialog" id="addForm" autocomplete="off">
+    <h2 style="font-size:30px">Lisää kaveri</h2>
+    <p class="bar-meta" style="margin:0">Kaverille, jolla ei ole puhelinta mukana. Muut voivat merkitä hänen käyntinsä.</p>
+    <div><label class="lbl" for="addName">Nimi</label><input type="text" id="addName" maxlength="24"></div>
+    <div class="row"><button class="btn btn-ghost" value="cancel" type="button" id="addCancel">Peru</button><button class="btn btn-amber" value="ok" type="submit">Lisää</button></div>
+  </form>
+</dialog>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(() => {
+'use strict';
+const NTFY = 'https://ntfy.sh';
+const OVERPASS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+];
+const KIND = {bar:'Baari', pub:'Pubi', nightclub:'Yökerho', biergarten:'Terassi'};
+const TONIGHT_MS = 14 * 3600e3;
+const $ = id => document.getElementById(id);
+
+/* ---------- storage helpers ---------- */
+const store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const rid = (n=10) => { const a='abcdefghijkmnopqrstuvwxyz23456789'; let s=''; const r=crypto.getRandomValues(new Uint8Array(n)); for (const x of r) s+=a[x%a.length]; return s; };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2200); }
+
+/* ---------- shared state (last-writer-wins maps) ---------- */
+let topic = null;
+let S = { name:null, members:{}, marks:{}, bars:{} };
+// members: id -> {n,ts}; marks: "bar|member" -> {v:0/1, ts}; bars: id -> {n,la,lo,k,a}
+let me = null;
+let lastSnapAt = 0;
+const seen = new Set();
+
+function lww(map, key, val){ const cur = map[key]; if (!cur || val.ts > cur.ts) { map[key] = val; return true; } return false; }
+function applyEv(ev){
+  if (!ev || typeof ev !== 'object') return false;
+  let ch = false;
+  if (ev.t === 'n' && typeof ev.name === 'string') { if (!S.name || ev.ts > S.name.ts) { S.name = {n:ev.name.slice(0,40), ts:ev.ts}; ch = true; } }
+  if (ev.t === 'm' && ev.id && typeof ev.n === 'string') ch = lww(S.members, ev.id, {n:ev.n.slice(0,24), ts:ev.ts}) || ch;
+  if (ev.t === 'v' && ev.b && Array.isArray(ev.who)) {
+    if (ev.b.i) S.bars[ev.b.i] = {n:String(ev.b.n||'').slice(0,80), la:+ev.b.la, lo:+ev.b.lo, k:ev.b.k||'bar', a:String(ev.b.a||'').slice(0,80)};
+    for (const w of ev.who) ch = lww(S.marks, ev.b.i + '|' + w, {v: ev.v ? 1 : 0, ts: ev.ts}) || ch;
+  }
+  if (ev.t === 's') {
+    if (ev.name) { if (!S.name || ev.name[1] > S.name.ts) { S.name = {n:ev.name[0], ts:ev.name[1]}; ch = true; } }
+    for (const [id, [n, ts]] of Object.entries(ev.m || {})) ch = lww(S.members, id, {n, ts}) || ch;
+    for (const [k, [v, ts]] of Object.entries(ev.k || {})) ch = lww(S.marks, k, {v, ts}) || ch;
+    for (const [id, b] of Object.entries(ev.b || {})) if (!S.bars[id]) { S.bars[id] = {n:b[0], la:b[1], lo:b[2], k:b[3], a:b[4]||''}; ch = true; }
+  }
+  return ch;
+}
+function saveLocal(){ store.set('ek:' + topic, S); }
+
+const outbox = [];
+async function publish(ev){
+  ev.ts = ev.ts || Date.now();
+  ev.e = rid(8);
+  seen.add(ev.e);
+  applyEv(ev); saveLocal(); render();
+  outbox.push(ev); flush();
+}
+let flushing = false;
+async function flush(){
+  if (flushing) return; flushing = true;
+  try {
+    while (outbox.length) {
+      const ev = outbox[0];
+      const r = await fetch(`${NTFY}/${topic}`, {method:'POST', body: JSON.stringify(ev)});
+      if (!r.ok) throw new Error('ntfy ' + r.status);
+      outbox.shift();
+    }
+    store.set('ek-out:' + topic, []);
+  } catch (e) {
+    store.set('ek-out:' + topic, outbox);
+    setTimeout(()=>{ flushing=false; flush(); }, 8000); return;
+  }
+  flushing = false;
+}
+
+function handleMsg(m){
+  if (!m || m.event !== 'message' || typeof m.message !== 'string') return false;
+  let ev; try { ev = JSON.parse(m.message); } catch { return false; }
+  if (ev.e && seen.has(ev.e)) return false;
+  if (ev.e) seen.add(ev.e);
+  if (ev.t === 's') lastSnapAt = Math.max(lastSnapAt, (m.time||0)*1000);
+  return applyEv(ev);
+}
+
+async function pollAll(){
+  const r = await fetch(`${NTFY}/${topic}/json?poll=1&since=all`);
+  if (!r.ok) throw new Error('poll ' + r.status);
+  const txt = await r.text();
+  let ch = false;
+  for (const line of txt.split('\n')) { if (!line.trim()) continue; try { ch = handleMsg(JSON.parse(line)) || ch; } catch {} }
+  return ch;
+}
+function subscribe(){
+  try {
+    const es = new EventSource(`${NTFY}/${topic}/sse`);
+    es.onmessage = e => { try { if (handleMsg(JSON.parse(e.data))) { saveLocal(); render(); } } catch {} };
+  } catch {}
+}
+// ntfy.sh keeps messages ~12 h. A periodic snapshot from any open device keeps the history alive.
+function snapshotChunks(){
+  const base = {t:'s'}; if (S.name) base.name = [S.name.n, S.name.ts];
+  const m = {}; for (const [id, x] of Object.entries(S.members)) m[id] = [x.n, x.ts];
+  const chunks = []; let cur = {...base, m, k:{}, b:{}};
+  const size = o => JSON.stringify(o).length;
+  for (const [k, x] of Object.entries(S.marks)) {
+    const bid = k.split('|')[0], b = S.bars[bid];
+    cur.k[k] = [x.v, x.ts];
+    if (b && !cur.b[bid]) cur.b[bid] = [b.n, +b.la.toFixed(5), +b.lo.toFixed(5), b.k, b.a];
+    if (size(cur) > 3300) { chunks.push(cur); cur = {t:'s', m:{}, k:{}, b:{}}; }
+  }
+  chunks.push(cur);
+  return chunks;
+}
+async function maybeSnapshot(){
+  if (Date.now() - lastSnapAt < 5 * 3600e3) return;
+  if (!Object.keys(S.members).length) return;
+  lastSnapAt = Date.now();
+  for (const c of snapshotChunks()) { c.ts = Date.now(); c.e = rid(8); seen.add(c.e); outbox.push(c); }
+  flush();
+}
+
+/* ---------- location & bars ---------- */
+let pos = null;          // {lat, lon, manual}
+let fetchedAt = null;    // center of last bar fetch
+let nearby = [];         // bars from Overpass
+let fallback = null;     // bundled bars.json
+let map, youMarker, barLayer, routeLine;
+
+function hav(a, b){ const R=6371e3, t=Math.PI/180; const dφ=(b.lat-a.lat)*t, dλ=(b.lon-a.lon)*t; const x=Math.sin(dφ/2)**2+Math.cos(a.lat*t)*Math.cos(b.lat*t)*Math.sin(dλ/2)**2; return 2*R*Math.asin(Math.sqrt(x)); }
+function fmtDist(m){ return m < 1000 ? Math.round(m/10)*10 + ' m' : (m/1000).toFixed(1).replace('.', ',') + ' km'; }
+function walkMin(m){ return Math.max(1, Math.round(m / 80)); }
+
+function withTimeout(p, ms){ return Promise.race([p, new Promise((_, j) => setTimeout(() => j(new Error('timeout')), ms))]); }
+async function overpass(lat, lon, radius){
+  const q = `[out:json][timeout:25];nwr["amenity"~"^(bar|pub|nightclub|biergarten)$"]["name"](around:${radius},${lat.toFixed(5)},${lon.toFixed(5)});out center tags;`;
+  let lastErr;
+  for (const ep of OVERPASS) {
+    try {
+      const r = await withTimeout(fetch(ep, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}}), 25000);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      return j.elements.map(e => ({
+        i: e.type[0] + e.id,
+        n: e.tags.name,
+        la: e.lat ?? e.center?.lat, lo: e.lon ?? e.center?.lon,
+        k: e.tags.amenity,
+        a: [e.tags['addr:street'], e.tags['addr:housenumber']].filter(Boolean).join(' ')
+      })).filter(b => b.la && b.lo);
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('overpass');
+}
+async function loadFallback(){
+  if (fallback) return fallback;
+  try { const r = await fetch('bars.json', {cache:'force-cache'}); if (r.ok) { const rows = await r.json(); fallback = rows.map(x => ({i:x[0], la:x[1], lo:x[2], n:x[3], k:x[4], a:x[5]||''})); } } catch {}
+  return fallback || [];
+}
+let loadingBars = false;
+async function refreshBars(force){
+  if (!pos || loadingBars) return;
+  if (!force && fetchedAt && hav(fetchedAt, pos) < 350) return;
+  loadingBars = true;
+  setNextLoading();
+  // Show the bundled list instantly, then replace it with live OpenStreetMap data.
+  const fb0 = await loadFallback();
+  if (fb0.length) { nearby = fb0.filter(b => hav(pos, {lat:b.la, lon:b.lo}) < 4000); render(); }
+  try {
+    let list = await overpass(pos.lat, pos.lon, 1500);
+    if (list.length < 12) list = await overpass(pos.lat, pos.lon, 3500);
+    nearby = list; fetchedAt = {...pos};
+    setStatus(null);
+  } catch (e) {
+    const fb = await loadFallback();
+    nearby = fb.filter(b => hav(pos, {lat:b.la, lon:b.lo}) < 4000);
+    fetchedAt = {...pos};
+    setStatus(nearby.length
+      ? 'Baarihaku on juuri nyt ruuhkainen, näytetään tallennettu pääkaupunkiseudun lista. <button type="button" data-act="retry">Yritä uudelleen</button>'
+      : 'Baareja ei saatu haettua. <button type="button" data-act="retry">Yritä uudelleen</button>');
+  }
+  loadingBars = false;
+  render();
+}
+
+function setStatus(html, ok){ const el = $('geoStatus'); if (!html) { el.hidden = true; return; } el.innerHTML = html; el.className = 'status' + (ok ? ' ok' : ''); el.hidden = false; }
+function setNextLoading(){ if (!nearby.length) { $('nextName').textContent = 'Haetaan baareja…'; $('nextMeta').textContent = 'Tämä voi kestää hetken.'; } }
+
+function startGeo(){
+  if (!('geolocation' in navigator)) { geoFail(); return; }
+  navigator.geolocation.watchPosition(p => {
+    const first = !pos || pos.manual;
+    if (pos && pos.manual && !first) return;
+    pos = {lat:p.coords.latitude, lon:p.coords.longitude, manual:false};
+    if (first) map.setView([pos.lat, pos.lon], 16);
+    placeYou(); refreshBars(); render();
+  }, geoFail, {enableHighAccuracy:true, maximumAge:15000, timeout:20000});
+}
+function geoFail(){
+  if (pos) return;
+  setStatus('Sijaintia ei saatu. Napauta karttaa siinä kohdassa, jossa olette, tai hae osoite alta.');
+  $('nextName').textContent = 'Missä olette?';
+  $('nextMeta').textContent = 'Napauta karttaa tai hae osoite.';
+}
+function setManual(lat, lon){ pos = {lat, lon, manual:true}; placeYou(); refreshBars(true); render(); }
+function placeYou(){
+  if (!pos) return;
+  if (!youMarker) youMarker = L.marker([pos.lat, pos.lon], {icon: L.divIcon({className:'', html:'<div class="you-dot"></div>', iconSize:[16,16], iconAnchor:[8,8]}), zIndexOffset:1000, interactive:false}).addTo(map);
+  else youMarker.setLatLng([pos.lat, pos.lon]);
+}
+
+/* ---------- derived ---------- */
+function visitorsOf(bid){ return Object.keys(S.members).filter(mid => S.marks[bid + '|' + mid]?.v === 1); }
+function allBars(){
+  const byId = new Map();
+  for (const b of nearby) byId.set(b.i, b);
+  for (const [id, b] of Object.entries(S.bars)) if (!byId.has(id) && pos && hav(pos, {lat:b.la, lon:b.lo}) < 4000) byId.set(id, {i:id, ...b});
+  const list = [...byId.values()].map(b => ({...b, d: pos ? hav(pos, {lat:b.la, lon:b.lo}) : 0, who: visitorsOf(b.i)}));
+  list.sort((a, b) => a.d - b.d);
+  return list;
+}
+function tonight(){
+  const since = Date.now() - TONIGHT_MS, out = new Map();
+  for (const [k, x] of Object.entries(S.marks)) {
+    if (x.v !== 1 || x.ts < since) continue;
+    const bid = k.split('|')[0];
+    if (!out.has(bid) || out.get(bid) > x.ts) out.set(bid, x.ts);
+  }
+  return [...out.entries()].sort((a, b) => a[1] - b[1]).map(([bid, ts]) => ({bid, ts, b: S.bars[bid]})).filter(x => x.b);
+}
+const dirUrl = b => `https://www.google.com/maps/dir/?api=1&destination=${b.la},${b.lo}&travelmode=walking`;
+
+/* ---------- render ---------- */
+let openBar = null;
+function render(){
+  if (!topic) return;
+  $('crewTitle').textContent = S.name?.n || 'Porukka';
+  document.title = (S.name?.n ? S.name.n + ' – ' : '') + 'Ensikäynti';
+  // members
+  const mem = Object.entries(S.members).sort((a, b) => a[1].ts - b[1].ts);
+  $('members').innerHTML = mem.map(([id, m]) => `<span class="chip${id === me ? ' me' : ''}"><span class="dot"></span>${esc(m.n)}${id === me ? ' (sinä)' : ''}</span>`).join('') +
+    `<button class="chip chip-add" type="button" data-act="add">+ Lisää kaveri</button>`;
+
+  const bars = allBars();
+  const onlyNew = $('onlyNew').checked;
+  const fresh = bars.filter(b => !b.who.length);
+  const shown = onlyNew ? fresh : bars;
+
+  // next CTA
+  const nx = fresh[0];
+  if (pos && nx) {
+    $('nextName').textContent = nx.n;
+    $('nextMeta').textContent = `${fmtDist(nx.d)} · noin ${walkMin(nx.d)} min kävellen · ${KIND[nx.k] || 'Baari'}${nx.a ? ' · ' + nx.a : ''}`;
+    $('nextGo').href = dirUrl(nx);
+    $('nextHere').dataset.bar = nx.i;
+    $('nextActions').hidden = false;
+  } else if (pos && !loadingBars && nearby.length) {
+    $('nextName').textContent = 'Kaikki lähibaarit on käyty';
+    $('nextMeta').textContent = 'Siirtykää vähän kauemmas, niin lista päivittyy.';
+    $('nextActions').hidden = true;
+  } else if (pos && loadingBars) {
+    setNextLoading(); $('nextActions').hidden = true;
+  }
+
+  // list
+  const hiddenCount = bars.length - shown.length;
+  $('hiddenNote').textContent = onlyNew && hiddenCount ? `${hiddenCount} lähibaaria piilotettu, koska joku on jo käynyt niissä.` : '';
+  if (!pos) $('bars').innerHTML = `<li class="empty">Baarit näkyvät tässä, kun sijainti on selvillä.</li>`;
+  else if (!shown.length) $('bars').innerHTML = `<li class="empty">${loadingBars ? 'Haetaan baareja…' : 'Ei baareja tällä alueella.'}</li>`;
+  else $('bars').innerHTML = shown.slice(0, 30).map(b => barItem(b, mem)).join('');
+
+  // map markers
+  if (map) {
+    barLayer.clearLayers();
+    for (const b of bars.slice(0, 120)) {
+      const v = b.who.length > 0;
+      const mk = L.circleMarker([b.la, b.lo], {radius: v ? 6 : 9, color: v ? '#7d80a3' : '#ffb547', weight: 2, fillColor: v ? '#3a3d5e' : '#ffb547', fillOpacity: v ? .6 : .85});
+      mk.bindTooltip(esc(b.n) + (v ? ' (käyty)' : ''), {direction:'top'});
+      mk.on('click', () => { openBar = b.i; if (!b.who.length || !onlyNew) {} else { $('onlyNew').checked = false; } render(); document.getElementById('b-' + b.i)?.scrollIntoView({behavior:'smooth', block:'center'}); });
+      barLayer.addLayer(mk);
+    }
+    const r = tonight();
+    const pts = r.map(x => [x.b.la, x.b.lo]);
+    if (routeLine) { routeLine.remove(); routeLine = null; }
+    if (pts.length > 1) routeLine = L.polyline(pts, {color:'#5fd3c4', weight:3, dashArray:'6 8', opacity:.9}).addTo(map);
+  }
+
+  // route
+  const r = tonight();
+  $('route').hidden = !r.length;
+  $('routeList').innerHTML = r.map(x => `<li>${esc(x.b.n)} <span>${new Date(x.ts).toLocaleTimeString('fi-FI', {hour:'2-digit', minute:'2-digit'})}</span></li>`).join('');
+}
+
+function barItem(b, mem){
+  const isOpen = openBar === b.i;
+  const chips = b.who.map(id => `<span class="chip${id === me ? ' me' : ''}">${esc(S.members[id]?.n)}</span>`).join('');
+  const nobody = !b.who.length;
+  const toggles = mem.map(([id, m]) => `<button type="button" class="tg" data-act="tg" data-bar="${b.i}" data-mem="${id}" aria-pressed="${b.who.includes(id)}">${esc(m.n)}${id === me ? ' (sinä)' : ''}</button>`).join('');
+  return `<li class="bar${nobody ? '' : ' visited'}" id="b-${b.i}">
+    <button class="bar-main" type="button" data-act="open" data-bar="${b.i}" aria-expanded="${isOpen}">
+      <span class="dist">${fmtDist(b.d)}<small>${walkMin(b.d)} min</small></span>
+      <span style="min-width:0"><span class="bar-name">${esc(b.n)}</span>${nobody ? '<span class="fresh">Uusi</span>' : ''}
+        <span class="bar-meta" style="display:block">${KIND[b.k] || 'Baari'}${b.a ? ' · ' + esc(b.a) : ''}</span>
+        ${chips ? `<span class="who">${chips}</span>` : ''}</span>
+    </button>
+    ${isOpen ? `<div class="detail">
+      <div><div class="lbl">Kuka on käynyt täällä?</div><div class="toggles">${toggles}</div></div>
+      <div class="row">
+        <button class="btn btn-amber btn-small" type="button" data-act="all" data-bar="${b.i}">Koko porukka on täällä</button>
+        <a class="btn btn-ghost btn-small" href="${dirUrl(b)}" target="_blank" rel="noopener">Reitti</a>
+        <a class="btn btn-ghost btn-small" href="https://www.openstreetmap.org/${({n:'node',w:'way',r:'relation'})[b.i[0]] || 'node'}/${b.i.slice(1)}" target="_blank" rel="noopener">Tiedot</a>
+      </div></div>` : ''}
+  </li>`;
+}
+function barById(id){ return allBars().find(b => b.i === id) || (S.bars[id] && {i:id, ...S.bars[id]}); }
+function barRef(b){ return {i:b.i, n:b.n, la:+(+b.la).toFixed(5), lo:+(+b.lo).toFixed(5), k:b.k, a:b.a || ''}; }
+
+/* ---------- events ---------- */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]'); if (!t) return;
+  const act = t.dataset.act;
+  if (act === 'open') { openBar = openBar === t.dataset.bar ? null : t.dataset.bar; render(); }
+  if (act === 'tg') {
+    const b = barById(t.dataset.bar); if (!b) return;
+    const on = t.getAttribute('aria-pressed') !== 'true';
+    publish({t:'v', b:barRef(b), who:[t.dataset.mem], v:on ? 1 : 0});
+  }
+  if (act === 'all') {
+    const b = barById(t.dataset.bar); if (!b) return;
+    publish({t:'v', b:barRef(b), who:Object.keys(S.members), v:1});
+    toast('Kippis! ' + b.n + ' merkitty koko porukalle.'); openBar = null; render();
+  }
+  if (act === 'add') { $('addName').value = ''; $('addDlg').showModal(); }
+  if (act === 'retry') refreshBars(true);
+});
+$('nextHere').addEventListener('click', () => {
+  const b = barById($('nextHere').dataset.bar); if (!b) return;
+  publish({t:'v', b:barRef(b), who:Object.keys(S.members), v:1});
+  toast('Kippis! ' + b.n + ' merkitty koko porukalle.');
+});
+$('onlyNew').addEventListener('change', render);
+$('addCancel').addEventListener('click', () => $('addDlg').close());
+$('addForm').addEventListener('submit', e => {
+  const n = $('addName').value.trim(); if (!n) { e.preventDefault(); return; }
+  publish({t:'m', id: 'm' + rid(6), n});
+});
+$('shareBtn').addEventListener('click', async () => {
+  const url = location.href.split('#')[0] + '#' + topic;
+  const data = {title:'Ensikäynti: ' + (S.name?.n || 'baarikierros'), text:'Liity porukkaan, merkitään baarit joissa on käyty:', url};
+  if (navigator.share) { try { await navigator.share(data); return; } catch (err) { if (err.name === 'AbortError') return; } }
+  try { await navigator.clipboard.writeText(url); toast('Linkki kopioitu'); } catch { prompt('Kopioi linkki:', url); }
+});
+$('addrForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const q = $('addr').value.trim(); if (!q) return;
+  try {
+    const vb = map.getBounds();
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=fi&countrycodes=fi&q=${encodeURIComponent(q)}`);
+    const j = await r.json();
+    if (!j.length) { toast('Paikkaa ei löytynyt'); return; }
+    const lat = +j[0].lat, lon = +j[0].lon;
+    map.setView([lat, lon], 16); setManual(lat, lon);
+  } catch { toast('Haku ei onnistunut'); }
+});
+
+/* who are you */
+function askWho(){
+  const pick = $('whoPick');
+  const mem = Object.entries(S.members);
+  pick.innerHTML = mem.map(([id, m]) => `<button type="button" class="tg" data-who="${id}">${esc(m.n)}</button>`).join('');
+  pick.onclick = ev => { const b = ev.target.closest('[data-who]'); if (!b) return; me = b.dataset.who; store.set('ek-me:' + topic, me); $('whoDlg').close(); render(); };
+  $('whoDlg').showModal();
+}
+$('whoForm').addEventListener('submit', e => {
+  const n = $('whoName').value.trim();
+  if (!n) { e.preventDefault(); return; }
+  const ex = Object.entries(S.members).find(([, m]) => m.n.toLowerCase() === n.toLowerCase());
+  if (ex) me = ex[0]; else { me = 'm' + rid(6); publish({t:'m', id:me, n}); }
+  store.set('ek-me:' + topic, me); render();
+});
+
+/* ---------- boot ---------- */
+function initMap(){
+  map = L.map('map', {zoomControl:true, attributionControl:true}).setView([60.1699, 24.9384], 14);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+  barLayer = L.layerGroup().addTo(map);
+  map.on('click', ev => { setManual(ev.latlng.lat, ev.latlng.lng); toast('Sijainti asetettu'); });
+}
+async function openCrew(t){
+  topic = t;
+  $('landing').hidden = true; $('app').hidden = false;
+  S = store.get('ek:' + topic, S);
+  S.members ||= {}; S.marks ||= {}; S.bars ||= {};
+  me = store.get('ek-me:' + topic, null);
+  for (const ev of store.get('ek-out:' + topic, [])) outbox.push(ev);
+  initMap(); render(); startGeo();
+  try { if (await pollAll()) saveLocal(); } catch { toast('Yhteys synkronointiin katkesi, merkinnät tallentuvat myöhemmin'); }
+  render();
+  subscribe(); flush();
+  if (!me || !S.members[me]) askWho();
+  maybeSnapshot();
+  setInterval(maybeSnapshot, 20 * 60e3);
+  setInterval(() => { pollAll().then(ch => { if (ch) { saveLocal(); render(); } }).catch(() => {}); }, 60e3);
+}
+$('createForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const crew = $('crewName').value.trim(), my = $('myName').value.trim();
+  if (!crew || !my) return;
+  const t = 'ek-' + rid(14);
+  history.replaceState(null, '', '#' + t);
+  openCrew(t).then(() => {});
+  me = 'm' + rid(6); store.set('ek-me:' + t, me);
+  publish({t:'n', name: crew});
+  publish({t:'m', id: me, n: my});
+  setTimeout(() => { if ($('whoDlg').open) $('whoDlg').close(); }, 50);
+  toast('Porukka luotu. Kutsu kaverit Kutsu-napista.');
+});
+window.addEventListener('hashchange', () => location.reload());
+
+const h = location.hash.slice(1);
+if (/^ek-[a-z0-9]{8,32}$/.test(h)) openCrew(h);
+else $('landing').hidden = false;
+})();
+</script>
+</body>
+</html>
